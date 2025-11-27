@@ -16,6 +16,10 @@ This file summarizes the current state of the Rust rewrite contained in `src/rus
 - Pixel format handling & conversions covering RGB24, common 4-byte layouts, RGB565/RGB555 with stride and endianness handling
 - Unit tests added covering format conversions and core functionality; `cargo test` passes for the default build
 - E2E helpers support ephemeral port allocation to make CI-friendly tests
+- Added a `Connections` manager module implementing basic client bookkeeping,
+  access checks and a `run_user_command` helper that sets RFB_* environment
+  variables and safely invokes external commands. This is the first non-trivial
+  port of `connections.c` functionality and includes unit tests.
 
 ## Files of interest
 - `Cargo.toml`, `build.rs` — workspace & feature gating for `libvnc`
