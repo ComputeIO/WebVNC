@@ -1,0 +1,29 @@
+[package]
+name = "src_utils"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[lib]
+name = "src_utils"
+crate-type = ["rlib", "staticlib"]
+
+[dependencies]
+libc = "0.2"
+clap = { version = "4.4", features = ["derive"] }
+nix = "0.29"
+x11rb = { version = "0.13", optional = true }
+
+ 
+
+[[bin]]
+name = "x11vnc"
+path = "src/main.rs"
+
+[features]
+libvnc = []
+x11 = ["x11rb"]
+
+[build-dependencies]
+bindgen = "0.65"
+pkg-config = "0.3"
