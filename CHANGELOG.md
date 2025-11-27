@@ -24,6 +24,10 @@ This file summarizes the current state of the Rust rewrite contained in `src/rus
      `-wireframe` parameter strings and exposes typed configuration objects. This
      is a conservative, test-driven port of a subset of `userinput.c` and
      prepares the way for integrating richer input-event handling next.
+ - Implemented a small, safe input event model (`InputEvent`) and an
+     `EventQueue` in `src/userinput.rs` to represent and queue keyboard and
+     pointer events and a simple helper to discard view-only input. Unit
+     tests were added to validate the queue behaviour.
 
 ## Files of interest
 - `Cargo.toml`, `build.rs` — workspace & feature gating for `libvnc`

@@ -175,6 +175,87 @@ pub fn parse_wireframe_str(s: &str) -> WireframeParams {
     out
 }
 
+/// Small input event model used by the PoC server.
+#[derive(Debug, Clone, PartialEq)]
+pub enum InputEvent {
+    Key { keysym: u32, pressed: bool, modifiers: u32 },
+    Pointer { x: i32, y: i32, button_mask: u8 },
+}
+
+/// Simple FIFO event queue for keyboard + pointer events.
+#[derive(Debug, Default)]
+pub struct EventQueue {
+    keys: Vec<InputEvent>,
+    ptrs: Vec<InputEvent>,
+}
+
+impl EventQueue {
+    pub fn new() -> Self {
+        EventQueue {
+            keys: Vec::new(),
+            ptrs: Vec::new(),
+        }
+    }
+
+    pub fn push(&mut self, ev: InputEvent) {
+        match ev {
+            InputEvent::Key { .. } => self.keys.push(ev),
+            InputEvent::Pointer { .. } => self.ptrs.push(ev),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.keys.len() + self.ptrs.len()
+    }
+
+    pub fn clear(&mut self) {
+        self.keys.clear();
+        self.ptrs.clear();
+    }
+
+    /// Remove up to `max_eat` input events when a client is view-only.
+    /// Returns the number of events eaten.
+    pub fn eat_viewonly_input(&mut self, max_eat: usize, keep: bool) -> usize {
+        let mut eaten = 0usize;
+        // Prefer to drop pointer events first
+        while eaten < max_eat && !self.ptrs.is_empty() {
+            if keep {
+                // if we keep, we simply break (we won't discard)
+                break;
+            }
+            self.ptrs.remove(0);
+            eaten += 1;
+        }
+        while eaten < max_eat && !self.keys.is_empty() {
+            if keep {
+                break;
+            }
+            self.keys.remove(0);
+            eaten += 1;
+        }
+        eaten
+    }
+
+    /// Drain and return up to `limit` events (FIFO order across pointers and keys).
+    /// We yield pointer events first followed by keys as they were inserted.
+    pub fn drain(&mut self, limit: Option<usize>) -> Vec<InputEvent> {
+        let mut out = Vec::new();
+        let mut taken = 0usize;
+        let max = limit.unwrap_or(usize::MAX);
+
+        while taken < max && !self.ptrs.is_empty() {
+            out.push(self.ptrs.remove(0));
+            taken += 1;
+        }
+        while taken < max && !self.keys.is_empty() {
+            out.push(self.keys.remove(0));
+            taken += 1;
+        }
+
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -191,6 +272,32 @@ mod tests {
         assert_eq!(p.key_persist, 0.3);
         assert_eq!(p.key_bdpush_time, 2.0);
         assert_eq!(p.mouse_maxtime, 0.5);
+    }
+
+    #[test]
+    fn event_queue_eat_viewonly() {
+        let mut q = EventQueue::new();
+        q.push(InputEvent::Pointer { x: 10, y: 20, button_mask: 1 });
+        q.push(InputEvent::Key { keysym: 10, pressed: true, modifiers: 0 });
+        q.push(InputEvent::Pointer { x: 11, y: 21, button_mask: 0 });
+
+        assert_eq!(q.len(), 3);
+        let eaten = q.eat_viewonly_input(2, false);
+        assert_eq!(eaten, 2);
+        assert_eq!(q.len(), 1);
+    }
+
+    #[test]
+    fn event_queue_drain_and_clear() {
+        let mut q = EventQueue::new();
+        q.push(InputEvent::Pointer { x: 1, y: 2, button_mask: 0 });
+        q.push(InputEvent::Key { keysym: 2, pressed: false, modifiers: 0 });
+        let drained = q.drain(None);
+        assert_eq!(drained.len(), 2);
+        assert_eq!(q.len(), 0);
+        q.push(InputEvent::Key { keysym: 4, pressed: true, modifiers: 1 });
+        q.clear();
+        assert_eq!(q.len(), 0);
     }
 
     #[test]
