@@ -10,3 +10,4 @@ pub mod safe_utils;
 pub mod screen;
 pub mod x11;
 pub mod connections;
+pub mod userinput;

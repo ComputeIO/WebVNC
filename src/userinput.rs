@@ -1,0 +1,217 @@
+// Partial port of the `userinput` subsystem from the C implementation.
+//
+// This file focuses on parsing the wireframe/scroll-copyrect parameter
+// strings and exposing a few simple state values used by higher-level
+// components in the PoC. It is intentionally conservative and test-driven
+// so the more complex, stateful event loop machinery can be done next.
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScrollCopyRectParams {
+    pub top: i32,
+    pub bottom: i32,
+    pub left: i32,
+    pub right: i32,
+    pub key_time: f64,
+    pub key_persist: f64,
+    pub key_bdpush_time: f64,
+    pub mouse_time: f64,
+    pub mouse_persist: f64,
+    pub mouse_bdpush_time: f64,
+    pub mouse_pointer_delay: f64,
+    pub mouse_maxtime: f64,
+}
+
+impl Default for ScrollCopyRectParams {
+    fn default() -> Self {
+        Self {
+            top: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            key_time: 0.0,
+            key_persist: 0.0,
+            key_bdpush_time: 0.0,
+            mouse_time: 0.0,
+            mouse_persist: 0.0,
+            mouse_bdpush_time: 0.0,
+            mouse_pointer_delay: 0.0,
+            mouse_maxtime: 0.0,
+        }
+    }
+}
+
+/// Parse a comma-separated scroll-copyrect string into typed parameters.
+/// Supported forms are identical to the C PoC's subset:
+/// "T+B+L+R" for top/bottom/left/right and timings for key/mouse.
+pub fn parse_scroll_copyrect_str(s: &str) -> ScrollCopyRectParams {
+    let mut out = ScrollCopyRectParams::default();
+    if s.trim().is_empty() {
+        return out;
+    }
+
+    // Split into parts by comma. C code expects part0 to be T+B+L+R,
+    // part1: key timings, part2: mouse timings
+    let parts: Vec<&str> = s.split(',').collect();
+
+    // part 0: T+B+L+R
+    if let Some(p) = parts.get(0) {
+        let mut ints = p.split('+').filter_map(|v| v.trim().parse::<i32>().ok());
+        if let (Some(t), Some(b), Some(l), Some(r)) = (ints.next(), ints.next(), ints.next(), ints.next()) {
+            out.top = t;
+            out.bottom = b;
+            out.left = l;
+            out.right = r;
+        }
+    }
+
+    // part1: key timings t1+t2+t3
+    if let Some(p) = parts.get(1) {
+        let mut floats = p.split('+').filter_map(|v| v.trim().parse::<f64>().ok());
+        if let (Some(t1), Some(t2), Some(t3)) = (floats.next(), floats.next(), floats.next()) {
+            out.key_time = t1;
+            out.key_persist = t2;
+            out.key_bdpush_time = t3;
+        }
+    }
+
+    // part2: mouse timings t1+t2+t3+t4+t5
+    if let Some(p) = parts.get(2) {
+        let mut floats = p.split('+').filter_map(|v| v.trim().parse::<f64>().ok());
+        if let (Some(t1), Some(t2), Some(t3), Some(t4), Some(t5)) = (
+            floats.next(),
+            floats.next(),
+            floats.next(),
+            floats.next(),
+            floats.next(),
+        ) {
+            out.mouse_time = t1;
+            out.mouse_persist = t2;
+            out.mouse_bdpush_time = t3;
+            out.mouse_pointer_delay = t4;
+            out.mouse_maxtime = t5;
+        }
+    }
+
+    out
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WireframeParams {
+    pub shade: u32,
+    pub linewidth: i32,
+    pub frac: f64,
+    pub top: i32,
+    pub bottom: i32,
+    pub left: i32,
+    pub right: i32,
+}
+
+impl Default for WireframeParams {
+    fn default() -> Self {
+        Self {
+            shade: 0xff,
+            linewidth: 2,
+            frac: 0.0,
+            top: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
+        }
+    }
+}
+
+/// Parse the wireframe parameter string (a subset of C's parse_wireframe_str
+/// semantics). We accept: <shade>,<lw>,<frac>,<top+bot+left+right> as first
+/// four fields; other fields are ignored for this PoC.
+pub fn parse_wireframe_str(s: &str) -> WireframeParams {
+    let mut out = WireframeParams::default();
+    if s.trim().is_empty() {
+        return out;
+    }
+
+    let parts: Vec<&str> = s.split(',').collect();
+
+    // part 0: shade - accept hex 0xRRGGBB or decimal
+    if let Some(p) = parts.get(0) {
+        let ptrim = p.trim();
+        if ptrim.starts_with("0x") {
+            if let Ok(n) = u32::from_str_radix(&ptrim[2..], 16) {
+                out.shade = n;
+            }
+        } else if let Ok(n) = ptrim.parse::<u32>() {
+            out.shade = n;
+        }
+    }
+
+    // part1: linewidth
+    if let Some(p) = parts.get(1) {
+        if let Ok(n) = p.trim().parse::<i32>() {
+            let n = n.max(1).min(8);
+            out.linewidth = n;
+        }
+    }
+
+    // part2: frac (percentage or floating)
+    if let Some(p) = parts.get(2) {
+        let t = p.trim();
+        if !t.is_empty() {
+            if t.contains('.') {
+                if let Ok(f) = t.parse::<f64>() { out.frac = f; }
+            } else if let Ok(i) = t.parse::<i32>() { out.frac = (i as f64) / 100.0; }
+        }
+    }
+
+    // part3: top+bot+left+right
+    if let Some(p) = parts.get(3) {
+        let mut ints = p.split('+').filter_map(|v| v.trim().parse::<i32>().ok());
+        if let (Some(t), Some(b), Some(l), Some(r)) = (ints.next(), ints.next(), ints.next(), ints.next()) {
+            out.top = t;
+            out.bottom = b;
+            out.left = l;
+            out.right = r;
+        }
+    }
+
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_scroll_copyrect_basic() {
+        let s = "10+20+3+4,0.5+0.3+2.0,0.1+0.2+0.3+0.4+0.5";
+        let p = parse_scroll_copyrect_str(s);
+        assert_eq!(p.top, 10);
+        assert_eq!(p.bottom, 20);
+        assert_eq!(p.left, 3);
+        assert_eq!(p.right, 4);
+        assert_eq!(p.key_time, 0.5);
+        assert_eq!(p.key_persist, 0.3);
+        assert_eq!(p.key_bdpush_time, 2.0);
+        assert_eq!(p.mouse_maxtime, 0.5);
+    }
+
+    #[test]
+    fn parse_wireframe_basic_hex() {
+        let s = "0xff,4,32,10+20+30+40";
+        let p = parse_wireframe_str(s);
+        assert_eq!(p.shade, 0xff);
+        assert_eq!(p.linewidth, 4);
+        // The C code interprets "32" as a percentage => 0.32
+        assert!((p.frac - 0.32).abs() < 1e-6);
+        assert_eq!(p.top, 10);
+        assert_eq!(p.right, 40);
+    }
+
+    #[test]
+    fn parse_wireframe_decimal_shade_and_frac_percent() {
+        let s = "127,2,15,1+2+3+4";
+        let p = parse_wireframe_str(s);
+        assert_eq!(p.shade, 127);
+        assert_eq!(p.linewidth, 2);
+        assert!((p.frac - 0.15).abs() < 1e-6);
+        assert_eq!(p.left, 3);
+    }
+}

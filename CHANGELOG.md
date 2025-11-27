@@ -20,6 +20,10 @@ This file summarizes the current state of the Rust rewrite contained in `src/rus
   access checks and a `run_user_command` helper that sets RFB_* environment
   variables and safely invokes external commands. This is the first non-trivial
   port of `connections.c` functionality and includes unit tests.
+ - Added a `userinput` PoC module that parses the `-scrollcopyrect` and
+     `-wireframe` parameter strings and exposes typed configuration objects. This
+     is a conservative, test-driven port of a subset of `userinput.c` and
+     prepares the way for integrating richer input-event handling next.
 
 ## Files of interest
 - `Cargo.toml`, `build.rs` — workspace & feature gating for `libvnc`
