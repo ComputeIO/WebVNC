@@ -28,6 +28,8 @@ This file summarizes the current state of the Rust rewrite contained in `src/rus
      `EventQueue` in `src/userinput.rs` to represent and queue keyboard and
      pointer events and a simple helper to discard view-only input. Unit
      tests were added to validate the queue behaviour.
+ - Added `check_user_input` helper which processes queued events via a
+   callback and drains them; useful for connecting the queue to an event loop.
 
 ## Files of interest
 - `Cargo.toml`, `build.rs` — workspace & feature gating for `libvnc`

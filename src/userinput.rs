@@ -256,6 +256,21 @@ impl EventQueue {
     }
 }
 
+/// Process up to `limit` events by draining them and invoking the provided
+/// callback for each event. Returns the number of processed events.
+pub fn check_user_input<F>(queue: &mut EventQueue, limit: Option<usize>, mut cb: F) -> usize
+where
+    F: FnMut(InputEvent),
+{
+    let evs = queue.drain(limit);
+    let mut processed = 0usize;
+    for ev in evs.into_iter() {
+        cb(ev);
+        processed += 1;
+    }
+    processed
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -297,6 +312,21 @@ mod tests {
         assert_eq!(q.len(), 0);
         q.push(InputEvent::Key { keysym: 4, pressed: true, modifiers: 1 });
         q.clear();
+        assert_eq!(q.len(), 0);
+    }
+
+    #[test]
+    fn check_user_input_callback_runs() {
+        let mut q = EventQueue::new();
+        q.push(InputEvent::Pointer { x: 3, y: 4, button_mask: 1 });
+        q.push(InputEvent::Key { keysym: 7, pressed: true, modifiers: 0 });
+
+        let mut seen = Vec::new();
+        let processed = super::check_user_input(&mut q, Some(10), |ev| {
+            seen.push(ev);
+        });
+        assert_eq!(processed, 2);
+        assert_eq!(seen.len(), 2);
         assert_eq!(q.len(), 0);
     }
 
