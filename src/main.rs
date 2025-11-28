@@ -134,6 +134,9 @@ fn main() {
                 std::thread::sleep(std::time::Duration::from_millis(200));
             }
 
+            // Create connections manager and propagate allow/allow_once from opts
+            let conn_mgr = src_utils::connections::Connections::new();
+            conn_mgr.set_allow_lists(opts.allow.clone(), opts.allow_once.clone());
             println!("Done (PoC): server ran a sample update loop and is shutting down.");
         }
         Err(e) => {

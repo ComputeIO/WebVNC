@@ -37,13 +37,28 @@ impl ClientData {
 #[derive(Debug, Default)]
 pub struct Connections {
     inner: Mutex<Vec<Arc<ClientData>>>,
+    allow_list: Mutex<Option<String>>,
+    allow_once: Mutex<Option<String>>,
 }
 
 impl Connections {
     pub fn new() -> Self {
         Self {
             inner: Mutex::new(Vec::new()),
+            allow_list: Mutex::new(None),
+            allow_once: Mutex::new(None),
         }
+    }
+
+    /// Set allow lists (used for access control). This stores the values
+    /// and they are used by `check_client_allowed`.
+    pub fn set_allow_lists(&self, allow: Option<String>, allow_once: Option<String>) {
+        let mut list_guard = self.allow_list.lock().unwrap();
+        *list_guard = allow;
+        drop(list_guard);
+        let mut once_guard = self.allow_once.lock().unwrap();
+        *once_guard = allow_once;
+        drop(once_guard);
     }
 
     pub fn add_client(&self, client: ClientData) {
@@ -81,6 +96,13 @@ impl Connections {
     pub fn count(&self) -> usize {
         let guard = self.inner.lock().unwrap();
         guard.len()
+    }
+
+    /// Check if a client address is allowed given stored allow lists.
+    pub fn check_client_allowed(&self, addr: &str) -> bool {
+        let list = self.allow_list.lock().unwrap();
+        let once = self.allow_once.lock().unwrap();
+        check_access(list.as_deref(), once.as_deref(), addr)
     }
 }
 
