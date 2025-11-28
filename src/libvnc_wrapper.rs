@@ -485,6 +485,94 @@ impl VncServer {
         }
     }
 
+    /// Update only a rectangle portion of the framebuffer.
+    pub fn update_framebuffer_rect(
+        &mut self,
+        _src: &[u8],
+        _x: usize,
+        _y: usize,
+        _w: usize,
+        _h: usize,
+    ) -> Result<(), String> {
+        #[cfg(not(feature = "libvnc"))]
+        {
+            Ok(())
+        }
+        #[cfg(feature = "libvnc")]
+        {
+            // basic input validation
+            if _src.is_empty() { return Err("empty source".to_string()); }
+            if _x + _w > (self.width as usize) || _y + _h > (self.height as usize) {
+                return Err("rect out of bounds".to_string());
+            }
+            let src_expected = _w * _h * 3;
+            if _src.len() < src_expected {
+                return Err("source buffer too small".into());
+            }
+            unsafe {
+                if self.framebuffer.is_null() {
+                    return Err("no framebuffer attached".into());
+                }
+                // For simplicity we convert per-pixel into destination bytes per pixel
+                // and copy per-row respecting destination stride.
+                let dst_stride = self.dest_stride;
+                let dst_bpp = self.bytes_per_pixel;
+                for row in 0.._h {
+                    let src_off = (row * _w * 3) as usize;
+                    let dst_row = _y + row;
+                    let dst_off = dst_row * dst_stride + _x * dst_bpp;
+                    if dst_bpp == 3 {
+                        std::ptr::copy_nonoverlapping(
+                            _src.as_ptr().add(src_off),
+                            (self.framebuffer as *mut u8).add(dst_off),
+                            _w * 3,
+                        );
+                    } else if dst_bpp == 4 {
+                        // convert each pixel from RGB -> 4 bytes target
+                        for col in 0.._w {
+                            let sidx = src_off + col * 3;
+                            let didx = dst_off + col * 4;
+                            let r = *_src.get(sidx).unwrap();
+                            let g = *_src.get(sidx + 1).unwrap();
+                            let b = *_src.get(sidx + 2).unwrap();
+                            // put r,g,b,0
+                            *(self.framebuffer as *mut u8).add(didx) = r;
+                            *(self.framebuffer as *mut u8).add(didx + 1) = g;
+                            *(self.framebuffer as *mut u8).add(didx + 2) = b;
+                            *(self.framebuffer as *mut u8).add(didx + 3) = 0;
+                        }
+                    } else if dst_bpp == 2 {
+                        // convert to RGB565/555 using existing helpers
+                        let conv = convert_rgb24_to_bpp_format(
+                            _src,
+                            _w,
+                            _h,
+                            2,
+                            self.dest_endianness,
+                            self.dest_order,
+                        )
+                        .map_err(|e| e)?;
+                        std::ptr::copy_nonoverlapping(
+                            conv.as_ptr(),
+                            (self.framebuffer as *mut u8).add(dst_off),
+                            _w * 2,
+                        );
+                    } else {
+                        return Err("unsupported bytes_per_pixel".to_string());
+                    }
+                }
+                rfbMarkRectAsModified(
+                    self.screen,
+                    _x as ::libc::c_int,
+                    _y as ::libc::c_int,
+                    _w as ::libc::c_int,
+                    _h as ::libc::c_int,
+                );
+            }
+            Ok(())
+        }
+    }
+
     /// Shutdown and cleanup the server resources. Safe wrapper for cleanup.
     pub fn shutdown(self) {
         #[cfg(not(feature = "libvnc"))]
@@ -696,6 +784,19 @@ mod tests {
                 ColorOrder::RGB
             )
             .is_ok());
+    }
+
+    #[test]
+    fn update_framebuffer_rect_stub_ok() {
+        let mut s = VncServer::init_headless(20, 10, None).unwrap();
+        // attach a 20x10 screen as our source
+        let mut buf = vec![0u8; 20 * 10 * 3];
+        assert!(s
+            .attach_framebuffer(&mut buf, 20, 10, 24, None, Endianness::Little, ColorOrder::RGB)
+            .is_ok());
+        // update a 4x4 rect at 2,2
+        let mut rect = vec![0x11u8; 4 * 4 * 3];
+        assert!(s.update_framebuffer_rect(&rect, 2, 2, 4, 4).is_ok());
     }
 
     #[test]

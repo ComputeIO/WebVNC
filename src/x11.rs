@@ -43,6 +43,35 @@ impl DisplayHandle {
     }
 }
 
+/// Normalize raw image bytes with `bpp` bytes-per-pixel into an RGB24
+/// vector (R, G, B per pixel). Accepts 3 or 4 byte source pixels.
+fn normalize_to_rgb24(src: &[u8], width: usize, height: usize, bpp: usize) -> Result<Vec<u8>, String> {
+    if width == 0 || height == 0 {
+        return Err("invalid dims".to_string());
+    }
+    if bpp != 3 && bpp != 4 {
+        return Err("unsupported bpp".to_string());
+    }
+    let npix = width.saturating_mul(height);
+    let expected = npix.saturating_mul(bpp);
+    if src.len() < expected {
+        return Err("source buffer too small".to_string());
+    }
+    let mut out = Vec::with_capacity(npix * 3);
+    if bpp == 3 {
+        out.extend_from_slice(&src[..expected]);
+        return Ok(out);
+    }
+    // bpp == 4
+    for i in 0..npix {
+        let si = i * 4;
+        out.push(src[si]);
+        out.push(src[si + 1]);
+        out.push(src[si + 2]);
+    }
+    Ok(out)
+}
+
 // -- real x11 feature-enabled implementation --------------------------------------------------
 #[cfg(feature = "x11")]
 mod x11_real {
@@ -99,9 +128,18 @@ mod x11_real {
             // PoC consumers to inspect. For safety, convert to an RGB24 vector
             // if the server reports 24 bits_per_pixel.
             if reply.depth == 24 || reply.depth == 32 {
-                // reply.data is a Vec<u8>. It may include padding, but for
-                // common setups we can return the bytes directly.
-                Ok(reply.data)
+                // reply.data may include padding or alpha bytes. Normalize
+                // it into a strict RGB24 (width * height * 3) vector.
+                let bpp = if reply.depth == 32 { 4 } else { 3 };
+                let expected_len = (width as usize) * (height as usize) * bpp;
+                if reply.data.len() < expected_len {
+                    return Err(format!("unexpected image data length: {} < {}", reply.data.len(), expected_len));
+                }
+                // Normalize rows: many servers return tightly packed row data
+                // for simple GetImage, but there may be padding — handle the
+                // common case: contiguous pixels with `bpp` bytes each.
+                
+                normalize_to_rgb24(&reply.data[..expected_len], width as usize, height as usize, bpp)
             } else {
                 Err(format!("unsupported depth: {}", reply.depth))
             }
@@ -123,5 +161,21 @@ mod tests {
         assert_eq!(buf.len(), 8 * 4 * 3);
         // check first pixel matches expected gradient
         assert_eq!(&buf[..3], &[0u8, 0u8, 0u8]);
+    }
+
+    #[test]
+    fn normalize_to_rgb24_3bpp() {
+        // two pixels with RGB values: A=(1,2,3), B=(4,5,6)
+        let src = vec![1u8, 2u8, 3u8, 4u8, 5u8, 6u8];
+        let out = normalize_to_rgb24(&src, 2, 1, 3).unwrap();
+        assert_eq!(out, src);
+    }
+
+    #[test]
+    fn normalize_to_rgb24_4bpp() {
+        // two pixels with RGBA values: A=(1,2,3,0xFF), B=(4,5,6,0xAA)
+        let src = vec![1u8, 2u8, 3u8, 0xFF, 4u8, 5u8, 6u8, 0xAA];
+        let out = normalize_to_rgb24(&src, 2, 1, 4).unwrap();
+        assert_eq!(out, vec![1u8, 2u8, 3u8, 4u8, 5u8, 6u8]);
     }
 }
