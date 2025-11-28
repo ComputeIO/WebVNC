@@ -11,3 +11,4 @@ pub mod screen;
 pub mod x11;
 pub mod connections;
 pub mod userinput;
+pub mod pointer;
