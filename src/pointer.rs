@@ -221,6 +221,24 @@ pub fn remap_button_event_to_input_events(
     out
 }
 
+/// Apply remapped actions for a source button event to an existing `EventQueue`.
+/// This will append any derived `InputEvent`s to the queue so they can be
+/// processed by the existing event loop.
+pub fn apply_button_remap_to_queue(
+    map: &ButtonMap,
+    queue: &mut crate::userinput::EventQueue,
+    src_button: u8,
+    pressed: bool,
+    x: i32,
+    y: i32,
+    current_mask: u32,
+) {
+    let evs = remap_button_event_to_input_events(map, src_button, pressed, x, y, current_mask);
+    for ev in evs.into_iter() {
+        queue.push(ev);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -271,5 +289,18 @@ mod tests {
         // should contain both the keysym send (down/up) and a pointer event
         assert!(evs.iter().any(|e| matches!(e, InputEvent::Key { keysym: 0x46, .. })));
         assert!(evs.iter().any(|e| matches!(e, InputEvent::Pointer { button_mask, .. } if *button_mask == 1u8 << (3-1))));
+    }
+
+    #[test]
+    fn apply_button_remap_to_queue_works_with_eventqueue() {
+        use crate::userinput::{EventQueue, InputEvent};
+        let m = initialize_pointer_map(Some("2:0x46+Button3:"));
+        let mut q = EventQueue::new();
+        apply_button_remap_to_queue(&m, &mut q, 2u8, true, 1, 2, 0);
+        // queue should now include remapped key and pointer events
+        assert!(q.len() >= 2);
+        let drained = q.drain(None);
+        assert!(drained.iter().any(|e| matches!(e, InputEvent::Key { keysym: 0x46, .. } )));
+        assert!(drained.iter().any(|e| matches!(e, InputEvent::Pointer { .. } )));
     }
 }

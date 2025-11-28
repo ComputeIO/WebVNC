@@ -795,7 +795,7 @@ mod tests {
             .attach_framebuffer(&mut buf, 20, 10, 24, None, Endianness::Little, ColorOrder::RGB)
             .is_ok());
         // update a 4x4 rect at 2,2
-        let mut rect = vec![0x11u8; 4 * 4 * 3];
+        let rect = vec![0x11u8; 4 * 4 * 3];
         assert!(s.update_framebuffer_rect(&rect, 2, 2, 4, 4).is_ok());
     }
 
