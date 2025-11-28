@@ -104,6 +104,21 @@ impl Connections {
         let once = self.allow_once.lock().unwrap();
         check_access(list.as_deref(), once.as_deref(), addr)
     }
+
+    /// Run a user-provided command for the specified client (if any). This
+    /// is a convenience wrapper around `run_user_command` and sets up simple
+    /// environment values. Returns the command's exit status.
+    pub fn run_hook(&self, cmd: &str, client_uid: Option<u32>, mode: &str) -> io::Result<i32> {
+        let client_opt: Option<Arc<ClientData>> = if let Some(uid) = client_uid {
+            let guard = self.inner.lock().unwrap();
+            // find by uid
+            guard.iter().find(|c| c.uid == uid).cloned()
+        } else {
+            None
+        };
+        // call the existing helper
+        run_user_command(cmd, client_opt.as_deref(), mode, None)
+    }
 }
 
 /// Simplified access control function. Behavior mirrors the C binary's basic
@@ -230,5 +245,16 @@ mod tests {
         assert_eq!(rc, 0);
         let rc2 = run_user_command("/bin/sh -c 'exit 42'", None, "accept", None).unwrap();
         assert_eq!(rc2, 42);
+    }
+
+    #[test]
+    fn run_hook_env_sets_vars() {
+        let c = Connections::new();
+        let client = ClientData::new(1, "127.0.0.1", Some(5901));
+        c.add_client(client);
+        let rc = c.run_hook("true", Some(1), "env").unwrap();
+        assert_eq!(rc, 1);
+        // env var set
+        assert_eq!(std::env::var("RFB_CLIENT_IP").unwrap(), "127.0.0.1");
     }
 }
