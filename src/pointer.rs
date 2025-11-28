@@ -25,6 +25,43 @@ pub enum RemapAction {
 /// pressed.
 pub type ButtonMap = Vec<Vec<RemapAction>>;
 
+use crate::userinput::InputEvent;
+
+/// Convert a single remap action into one or more `InputEvent`s given a
+/// source `pressed` boolean. For KeysymNum we emit a down then up event
+/// (pressed true -> send down/up), for Button we emit a pointer mask
+/// change event. `x`,`y` and `current_mask` are used for pointer events.
+fn remap_action_to_input_events(
+    action: &RemapAction,
+    pressed: bool,
+    x: i32,
+    y: i32,
+    current_mask: u32,
+) -> Vec<InputEvent> {
+    match action {
+        RemapAction::Button(n) => {
+            let bit = 1u32 << ((n.saturating_sub(1)) as u32);
+            let new_mask = if pressed { current_mask | bit } else { current_mask & !bit };
+            vec![InputEvent::Pointer { x, y, button_mask: new_mask as u8 }]
+        }
+        RemapAction::KeysymNum(k) => {
+            // produce down then up events; if `pressed` is false, only produce up
+            let mut out = Vec::new();
+            if pressed {
+                out.push(InputEvent::Key { keysym: *k, pressed: true, modifiers: 0 });
+                out.push(InputEvent::Key { keysym: *k, pressed: false, modifiers: 0 });
+            } else {
+                out.push(InputEvent::Key { keysym: *k, pressed: false, modifiers: 0 });
+            }
+            out
+        }
+        RemapAction::KeysymName(_) => {
+            // textual keysym names are not converted in the PoC yet; ignore
+            Vec::new()
+        }
+    }
+}
+
 /// Parse a `:sym+sym:` style list (without the surrounding colons) or a
 /// single token into a vector of actions.
 fn parse_sym_list(list: &str) -> Vec<RemapAction> {
@@ -161,6 +198,29 @@ pub fn initialize_pointer_map(remap_str: Option<&str>) -> ButtonMap {
     map
 }
 
+/// Given a button map and a source button event (button id and pressed
+/// state), emit a list of InputEvents representing remapped actions. The
+/// `x`,`y` and `current_mask` parameters are used to construct pointer
+/// events; callers should pass the most recent pointer mask.
+pub fn remap_button_event_to_input_events(
+    map: &ButtonMap,
+    src_button: u8,
+    pressed: bool,
+    x: i32,
+    y: i32,
+    current_mask: u32,
+) -> Vec<InputEvent> {
+    if src_button == 0 || (src_button as usize) >= map.len() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for action in map[src_button as usize].iter() {
+        let mut evs = remap_action_to_input_events(action, pressed, x, y, current_mask);
+        out.append(&mut evs);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -200,5 +260,16 @@ mod tests {
         let m = initialize_pointer_map(Some(":Foo+Bar:"));
         assert_eq!(m[1][0], RemapAction::KeysymName("Foo".to_string()));
         assert_eq!(m[1][1], RemapAction::KeysymName("Bar".to_string()));
+    }
+
+    #[test]
+    fn remap_button_event_to_input_events_generates_key_and_pointer() {
+        use crate::userinput::InputEvent;
+        let m = initialize_pointer_map(Some("2:0x46+Button3:"));
+        // emulate src button 2 pressed with initial mask 0
+        let evs = remap_button_event_to_input_events(&m, 2u8, true, 10, 20, 0);
+        // should contain both the keysym send (down/up) and a pointer event
+        assert!(evs.iter().any(|e| matches!(e, InputEvent::Key { keysym: 0x46, .. })));
+        assert!(evs.iter().any(|e| matches!(e, InputEvent::Pointer { button_mask, .. } if *button_mask == 1u8 << (3-1))));
     }
 }
