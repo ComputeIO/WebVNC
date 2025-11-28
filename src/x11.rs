@@ -54,6 +54,7 @@ impl DisplayHandle {
     }
 }
 
+#[allow(dead_code)]
 /// Normalize raw image bytes with `bpp` bytes-per-pixel into an RGB24
 /// vector (R, G, B per pixel). Accepts 3 or 4 byte source pixels.
 fn normalize_to_rgb24(src: &[u8], width: usize, height: usize, bpp: usize) -> Result<Vec<u8>, String> {
