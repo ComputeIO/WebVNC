@@ -29,6 +29,7 @@ fn main() {
         .allowlist_function("rfbGetScreen")
         .allowlist_function("rfbInitServer")
         .allowlist_function("rfbScreenCleanup")
+        .allowlist_function("rfbProcessEvents")
         .allowlist_type("rfbScreenInfo")
         .generate();
 
@@ -61,6 +62,7 @@ fn main() {
 
             pub fn rfbInitServer(screen: *mut rfbScreenInfo) -> ::libc::c_int;
             pub fn rfbScreenCleanup(screen: *mut rfbScreenInfo);
+            pub fn rfbProcessEvents(screen: *mut rfbScreenInfo, usec: ::libc::c_int) -> ::libc::c_int;
 
             pub fn rfbMarkRectAsModified(screen: *mut rfbScreenInfo, x: ::libc::c_int, y: ::libc::c_int, w: ::libc::c_int, h: ::libc::c_int);
         }

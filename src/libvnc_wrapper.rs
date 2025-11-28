@@ -194,9 +194,23 @@ impl VncServer {
 
         #[cfg(feature = "libvnc")]
         {
-            // In the initial FFI we don't assume a particular event-loop
-            // helper; return Ok until we implement an explicit pump that
-            // calls libvncserver's event processing functions.
+            // Process libvncserver events until the timeout is reached.
+            // This doesn't attempt to be a full client detection routine;
+            // it ensures the native event loop is driven for the period
+            // requested and provides a simple mechanism to wait for
+            // potential incoming clients.
+            unsafe {
+                let mut remaining = _timeout_ms as i64;
+                // We process events in increments (1ms -> 1000 usec) so that
+                // we can respond quickly and avoid blocking for a large
+                // amount of time.
+                while remaining > 0 {
+                    // rfbProcessEvents accepts microseconds.
+                    let usec = std::cmp::min(1_000, (remaining * 1_000) as i64) as i32;
+                    rfbProcessEvents(self.screen, usec as ::libc::c_int);
+                    remaining -= (usec as i64) / 1_000;
+                }
+            }
             Ok(())
         }
     }
@@ -659,6 +673,12 @@ mod tests {
     fn wait_for_client_is_ok() {
         let s = VncServer::init_headless(200, 150, None).unwrap();
         assert!(s.wait_for_client(1000).is_ok());
+    }
+
+    #[test]
+    fn wait_for_client_zero_ms_ok() {
+        let s = VncServer::init_headless(200, 150, None).unwrap();
+        assert!(s.wait_for_client(0).is_ok());
     }
 
     #[test]
