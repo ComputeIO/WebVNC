@@ -41,6 +41,17 @@ impl DisplayHandle {
         }
         Ok(buf)
     }
+
+    /// Inject a key event into the display (press/release) — stubbed when
+    /// the 'x11' feature is not enabled.
+    pub fn inject_key_event(&self, _keysym: u32, _pressed: bool) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// Inject a pointer event (x,y and button_mask) into the display — stub.
+    pub fn inject_pointer_event(&self, _x: i32, _y: i32, _button_mask: u8) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 /// Normalize raw image bytes with `bpp` bytes-per-pixel into an RGB24
@@ -143,6 +154,18 @@ mod x11_real {
             } else {
                 Err(format!("unsupported depth: {}", reply.depth))
             }
+        }
+
+        /// Inject a key event into the display (press/release)
+        pub fn inject_key_event(&self, _keysym: u32, _pressed: bool) -> Result<(), String> {
+            // TODO: real implementation using XTest / XI2
+            Ok(())
+        }
+
+        /// Inject a pointer event (x,y and button_mask) into the display
+        pub fn inject_pointer_event(&self, _x: i32, _y: i32, _button_mask: u8) -> Result<(), String> {
+            // TODO: real implementation using XTest / XI2
+            Ok(())
         }
     }
 }

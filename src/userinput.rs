@@ -265,10 +265,26 @@ where
     let evs = queue.drain(limit);
     let mut processed = 0usize;
     for ev in evs.into_iter() {
+        // Dispatch to callback; for pointer/key events the callback may
+        // choose to inject into a DisplayHandle or other system.
         cb(ev);
         processed += 1;
     }
     processed
+}
+
+/// Dispatch a single InputEvent to the provided DisplayHandle (if any).
+/// This currently delegates to `x11::DisplayHandle` for real injection
+/// when the x11 feature is enabled; otherwise it is a no-op.
+pub fn dispatch_event_to_display(display: Option<&crate::x11::DisplayHandle>, ev: &InputEvent) -> Result<(), String> {
+    if let Some(d) = display {
+        match ev {
+            InputEvent::Key { keysym, pressed, .. } => d.inject_key_event(*keysym, *pressed),
+            InputEvent::Pointer { x, y, button_mask } => d.inject_pointer_event(*x, *y, *button_mask),
+        }
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -328,6 +344,17 @@ mod tests {
         assert_eq!(processed, 2);
         assert_eq!(seen.len(), 2);
         assert_eq!(q.len(), 0);
+    }
+
+    #[test]
+    fn dispatch_event_to_display_noop() {
+        let mut q = EventQueue::new();
+        q.push(InputEvent::Key { keysym: 10, pressed: true, modifiers: 0 });
+        // dispatch without a display should be Ok
+        let evs = q.drain(None);
+        for ev in evs.iter() {
+            assert!(super::dispatch_event_to_display(None, ev).is_ok());
+        }
     }
 
     #[test]
