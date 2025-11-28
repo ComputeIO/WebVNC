@@ -149,6 +149,23 @@ fn main() {
     process::exit(0);
 }
 
+// Small demonstration of hooking the EventQueue into the DisplayHandle
+// and dispatching InputEvents via `userinput::dispatch_event_to_display`.
+#[allow(dead_code)]
+fn demo_input_dispatch() {
+    use src_utils::userinput::{EventQueue, InputEvent, dispatch_event_to_display};
+    // Connect optional display (stubbed if feature disabled)
+    if let Ok(dpy) = src_utils::x11::DisplayHandle::connect(None) {
+        let mut q = EventQueue::new();
+        q.push(InputEvent::Pointer { x: 10, y: 10, button_mask: 1 });
+        q.push(InputEvent::Key { keysym: 32, pressed: true, modifiers: 0 });
+        // process and dispatch all
+        let _ = src_utils::userinput::check_user_input(&mut q, None, |ev| {
+            let _ = dispatch_event_to_display(Some(&dpy), &ev);
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
