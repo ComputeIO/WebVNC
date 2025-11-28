@@ -1,5 +1,6 @@
 use clap::Parser;
 use std::process;
+use src_utils::options::Options;
 
 /// Minimal x11vnc (PoC) CLI - entrypoint for the Rust rewrite.
 #[derive(Parser, Debug)]
@@ -19,7 +20,10 @@ struct Args {
 }
 
 fn main() {
+    // Parse CLI args via `Args` struct for minimal commands.
     let args = Args::parse();
+    // Also parse broader `Options` to map to PoC flags.
+    let opts = Options::from_args();
 
     if args.status {
         println!("x11vnc (Rust PoC) status: OK");
@@ -73,7 +77,7 @@ fn main() {
     }
 
     // initialize the (stubbed) VNC server and attach the screen
-    match src_utils::libvnc_wrapper::VncServer::init_headless(800, 600, args.port) {
+    match src_utils::libvnc_wrapper::VncServer::init_headless(800, 600, opts.port.or(args.port)) {
         Ok(server) => {
             #[allow(unused_mut)]
             let mut server = server;
