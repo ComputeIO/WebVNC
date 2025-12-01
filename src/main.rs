@@ -137,6 +137,21 @@ fn main() {
             // Create connections manager and propagate allow/allow_once from opts
             let conn_mgr = src_utils::connections::Connections::new();
             conn_mgr.set_allow_lists(opts.allow.clone(), opts.allow_once.clone());
+
+            // Initialize injector once and store it in the connections manager
+            // Prefer X11 when available, otherwise fall back to uinput (feature-gated).
+            #[cfg(feature = "x11")]
+            {
+                if let Ok(dpy) = src_utils::x11::DisplayHandle::connect(None) {
+                    conn_mgr.set_injector(Some(src_utils::inject::Injector::X11(dpy)));
+                }
+            }
+            #[cfg(all(not(feature = "x11"), feature = "uinput"))]
+            {
+                if let Ok(u) = src_utils::uinput::UInputDevice::create("webvnc-main") {
+                    conn_mgr.set_injector(Some(src_utils::inject::Injector::UInput(u)));
+                }
+            }
             println!("Done (PoC): server ran a sample update loop and is shutting down.");
         }
         Err(e) => {
@@ -155,14 +170,35 @@ fn main() {
 fn demo_input_dispatch() {
     use src_utils::userinput::{EventQueue, InputEvent, dispatch_event_to_display};
     // Connect optional display (stubbed if feature disabled)
-    if let Ok(dpy) = src_utils::x11::DisplayHandle::connect(None) {
-        let mut q = EventQueue::new();
-        q.push(InputEvent::Pointer { x: 10, y: 10, button_mask: 1 });
-        q.push(InputEvent::Key { keysym: 32, pressed: true, modifiers: 0 });
-        // process and dispatch all
-        let _ = src_utils::userinput::check_user_input(&mut q, None, |ev| {
-            let _ = dispatch_event_to_display(Some(&dpy), &ev);
-        });
+    // Prefer X11 injector when available
+    #[cfg(feature = "x11")]
+    {
+        if let Ok(dpy) = src_utils::x11::DisplayHandle::connect(None) {
+            let mut q = EventQueue::new();
+            q.push(InputEvent::Pointer { x: 10, y: 10, button_mask: 1 });
+            q.push(InputEvent::Key { keysym: 32, pressed: true, modifiers: 0 });
+            // Use concrete Injector to avoid boxing
+            let mut injector = src_utils::inject::Injector::X11(dpy);
+            let _ = src_utils::userinput::check_user_input(&mut q, None, |ev| {
+                let _ = dispatch_event_to_display(Some(&mut injector), &ev);
+            });
+            return;
+        }
+    }
+
+    // Fallback to Linux uinput when compiled with the feature and X11 not present
+    #[cfg(feature = "uinput")]
+    {
+        if let Ok(u) = src_utils::uinput::UInputDevice::create("webvnc-demo") {
+            let mut q = EventQueue::new();
+            q.push(InputEvent::Pointer { x: 10, y: 10, button_mask: 1 });
+            q.push(InputEvent::Key { keysym: 32, pressed: true, modifiers: 0 });
+            let mut injector = src_utils::inject::Injector::UInput(u);
+            let _ = src_utils::userinput::check_user_input(&mut q, None, |ev| {
+                let _ = dispatch_event_to_display(Some(&mut injector), &ev);
+            });
+            return;
+        }
     }
 }
 

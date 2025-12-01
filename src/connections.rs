@@ -39,6 +39,7 @@ pub struct Connections {
     inner: Mutex<Vec<Arc<ClientData>>>,
     allow_list: Mutex<Option<String>>,
     allow_once: Mutex<Option<String>>,
+    injector: Mutex<Option<crate::inject::Injector>>,
 }
 
 impl Connections {
@@ -47,6 +48,30 @@ impl Connections {
             inner: Mutex::new(Vec::new()),
             allow_list: Mutex::new(None),
             allow_once: Mutex::new(None),
+            injector: Mutex::new(None),
+        }
+    }
+
+    /// Set or replace the optional input `Injector` used for dispatching
+    /// input events from the server to the host system. Passing `None` will
+    /// clear any previously set injector.
+    pub fn set_injector(&self, inj: Option<crate::inject::Injector>) {
+        let mut g = self.injector.lock().unwrap();
+        *g = inj;
+    }
+
+    /// Helper to access the injector mutably while holding the lock. The
+    /// closure receives a mutable reference to the injector if present.
+    /// Returns `None` if no injector is set.
+    pub fn with_injector<R, F>(&self, mut f: F) -> Option<R>
+    where
+        F: FnMut(&mut crate::inject::Injector) -> R,
+    {
+        let mut g = self.injector.lock().unwrap();
+        if let Some(ref mut inj) = *g {
+            Some(f(inj))
+        } else {
+            None
         }
     }
 

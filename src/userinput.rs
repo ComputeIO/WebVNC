@@ -276,11 +276,18 @@ where
 /// Dispatch a single InputEvent to the provided DisplayHandle (if any).
 /// This currently delegates to `x11::DisplayHandle` for real injection
 /// when the x11 feature is enabled; otherwise it is a no-op.
-pub fn dispatch_event_to_display(display: Option<&crate::x11::DisplayHandle>, ev: &InputEvent) -> Result<(), String> {
+pub fn dispatch_event_to_display(
+    display: Option<&mut crate::inject::Injector>,
+    ev: &InputEvent,
+) -> Result<(), String> {
     if let Some(d) = display {
         match ev {
-            InputEvent::Key { keysym, pressed, .. } => d.inject_key_event(*keysym, *pressed),
-            InputEvent::Pointer { x, y, button_mask } => d.inject_pointer_event(*x, *y, *button_mask),
+            InputEvent::Key { keysym, pressed, .. } => d
+                .send_key(*keysym as u16, *pressed)
+                .map_err(|e| e.to_string()),
+            InputEvent::Pointer { x, y, button_mask } => d
+                .send_pointer(*x, *y, *button_mask as u32)
+                .map_err(|e| e.to_string()),
         }
     } else {
         Ok(())

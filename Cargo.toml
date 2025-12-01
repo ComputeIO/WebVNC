@@ -23,6 +23,7 @@ path = "src/main.rs"
 [features]
 libvnc = []
 x11 = ["x11rb"]
+uinput = []
 
 [build-dependencies]
 bindgen = "0.65"

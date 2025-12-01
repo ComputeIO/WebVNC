@@ -13,3 +13,6 @@ pub mod connections;
 pub mod userinput;
 pub mod pointer;
 pub mod options;
+#[cfg(feature = "uinput")]
+pub mod uinput;
+pub mod inject;
