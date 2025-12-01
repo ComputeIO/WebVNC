@@ -22,7 +22,9 @@ path = "src/main.rs"
 
 [features]
 libvnc = []
-x11 = ["x11rb"]
+# Enable x11rb with the xtest protocol feature when our `x11` feature is enabled.
+# This ensures the `xtest` module in x11rb is compiled in.
+x11 = ["x11rb/xtest"]
 uinput = []
 
 [build-dependencies]

@@ -152,6 +152,27 @@ fn main() {
                     conn_mgr.set_injector(Some(src_utils::inject::Injector::UInput(u)));
                 }
             }
+            // Demonstrate using the persisted injector via `Connections::with_injector`.
+            // This shows how server code should access the shared injector rather
+            // than constructing a new one per-call.
+            {
+                use src_utils::userinput::{EventQueue, InputEvent};
+                let mut q = EventQueue::new();
+                q.push(InputEvent::Pointer { x: 10, y: 10, button_mask: 1 });
+                q.push(InputEvent::Key { keysym: 32, pressed: true, modifiers: 0 });
+
+                // Process queued events and dispatch through the stored injector
+                let _processed = src_utils::userinput::check_user_input(&mut q, None, |ev| {
+                    let _ = conn_mgr.with_injector(|inj| match ev {
+                        src_utils::userinput::InputEvent::Key { keysym, pressed, .. } => {
+                            let _ = inj.send_key(keysym as u16, pressed);
+                        }
+                        src_utils::userinput::InputEvent::Pointer { x, y, button_mask } => {
+                            let _ = inj.send_pointer(x, y, button_mask as u32);
+                        }
+                    });
+                });
+            }
             println!("Done (PoC): server ran a sample update loop and is shutting down.");
         }
         Err(e) => {
